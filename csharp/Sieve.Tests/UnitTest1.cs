@@ -13,10 +13,10 @@ namespace Sieve.Tests
             Assert.AreEqual(541, sieve.NthPrime(99));
             Assert.AreEqual(3581, sieve.NthPrime(500));
             Assert.AreEqual(7793, sieve.NthPrime(986));
-            Assert.AreEqual(17393, sieve.NthPrime(2000));
-            Assert.AreEqual(15485867, sieve.NthPrime(1000000));
-            Assert.AreEqual(179424691, sieve.NthPrime(10000000));
-            //Assert.AreEqual(2038074751, sieve.NthPrime(100000000)); not required, just a fun challenge
+            Assert.AreEqual(17393, sieve.NthPrime(2_000));
+            Assert.AreEqual(15485867, sieve.NthPrime(1_000_000));
+            Assert.AreEqual(179424691, sieve.NthPrime(10_000_000));
+            Assert.AreEqual(2038074751, sieve.NthPrime(100_000_000));
         }
     }
 }
