@@ -8,19 +8,21 @@ namespace Sieve.Benchmarks;
 [MemoryDiagnoser]
 public class SieveBenchmarks
 {
-    [Params(1000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000)]
+    // [Params(1000, 100_000, 1_000_000, 10_000_000, 100_000_000, 1_000_000_000)]
+    [Params(1000, 100_000, 1_000_000, 100_000_000)]
     public int limit;
     
-    const int SEGMENT_SIZE = 100_000;
+    // const int SEGMENT_SIZE = 100_000;
 
-    // [Params(100_000, 500_000, 1_000_000, 5_000_000, 10_000_000, 100_000_000)]
-    // public int segmentSize;
+    [Params(100_000, 500_000, 1_000_000)]
+    // [Params(100_000)]
+    public int segmentSize;
 
     [Benchmark(Baseline = true)]
     public List<long> Sieve()
     {
         var isPrime = new bool[limit + 1];
-        Array.Fill(isPrime, true, 2, (int)limit - 1);
+        Array.Fill(isPrime, true, 2, limit - 1);
 
         for (int i = 2; i * i <= limit; i++)
         {
@@ -43,80 +45,85 @@ public class SieveBenchmarks
     public List<long> SegmentedSieve()
     {
         int basePrimeLimit = (int)Math.Sqrt(limit) + 1;
-        var basePrimes = BoolArraySieve(basePrimeLimit);
+        var basePrimes = Sieve(basePrimeLimit);
         var primes = basePrimes.ToList();
 
-        var segmentSize = Math.Min(SEGMENT_SIZE, limit);
+        segmentSize = Math.Min(segmentSize, limit);
 
-        for (int low = segmentSize; low <= limit; low += segmentSize)
+        for (int low = basePrimeLimit + 1; low <= limit; low += segmentSize)
         {
-            int high = Math.Min(low + segmentSize - 1, limit);
+            var high = Math.Min(low + segmentSize - 1, limit);
             var isPrime = new bool[high - low + 1];
             Array.Fill(isPrime, true);
 
-            foreach (var p in basePrimes)
+            foreach (var prime in basePrimes)
             {
-                int start = (int)Math.Max(p * p, ((low + p - 1) / p) * p);
-                for (int j = start; j <= high; j += (int)p)
+                var remainder = low % prime;
+                var start = remainder == 0 ? low : (int)(low + (prime - remainder));
+
+                for (int j = start; j <= high; j += (int)prime)
                     isPrime[j - low] = false;
             }
 
             for (int i = low; i <= high; i++)
                 if (isPrime[i - low])
-                    primes.Add((long)i);
+                    primes.Add(i);
         }
 
         return primes;
     }
 
-    // [Benchmark]
-    // public List<long> ParallelSegmentedSieve()
-    // {
-    //     int basePrimeLimit = (int)Math.Sqrt(limit) + 1;
-    //     var basePrimes = BoolArraySieve(basePrimeLimit);
-
-    //     var primes = new ConcurrentBag<long>(basePrimes);
-
-    //     segmentSize = Math.Min(segmentSize, limit);
-
-    //     Parallel.For(0, (int)((limit - segmentSize) / segmentSize) + 1, i =>
-    //     {
-    //         int low = segmentSize + i * segmentSize;
-    //         int high = Math.Min(low + segmentSize - 1, limit);
-    //         var isPrime = new bool[high - low + 1];
-    //         Array.Fill(isPrime, true);
-
-    //         foreach (var p in basePrimes)
-    //         {
-    //             int start = (int)Math.Max(p * p, ((low + p - 1) / p) * p);
-    //             for (int j = start; j <= high; j += (int)p)
-    //                 isPrime[j - low] = false;
-    //         }
-
-    //         for (int j = low; j <= high; j++)
-    //             if (isPrime[j - low])
-    //                 primes.Add(j);
-    //     });
-
-    //     return primes.OrderBy(p => p).ToList(); // ensure ordered output
-    // }
-
-    private List<long> BoolArraySieve(long customLimit)
+    [Benchmark]
+    public List<long> ParallelSegmentedSieve()
     {
-        var isPrime = new bool[customLimit + 1];
-        Array.Fill(isPrime, true, 2, (int)customLimit - 1);
+        int basePrimeLimit = (int)Math.Sqrt(limit) + 1;
+        var basePrimes = Sieve(basePrimeLimit);
+        int numSegments = (limit - basePrimeLimit) / segmentSize + 1;
 
-        for (int i = 2; i * i <= customLimit; i++)
+        var localPrimes = new List<long>[numSegments];
+
+        Parallel.For(0, numSegments, i =>
+        {
+            int low = basePrimeLimit + 1 + i * segmentSize;
+            int high = Math.Min(low + segmentSize - 1, limit);
+            var isPrime = new bool[high - low + 1];
+            Array.Fill(isPrime, true);
+
+            foreach (var prime in basePrimes)
+            {
+                var remainder = low % prime;
+                var start = remainder == 0 ? low : (int)(low + (prime - remainder));
+                for (long j = start; j <= high; j += prime)
+                    isPrime[j - low] = false;
+            }
+
+            var segmentPrimes = new List<long>();
+            for (int j = low; j <= high; j++)
+                if (isPrime[j - low])
+                    segmentPrimes.Add(j);
+
+            localPrimes[i] = segmentPrimes;
+        });
+
+        return basePrimes.Concat(localPrimes.SelectMany(x => x)).ToList();
+    }
+
+    private List<long> Sieve(int limit)
+    {
+        var isPrime = new bool[limit + 1];
+        Array.Fill(isPrime, true, 2, limit - 1);
+
+        for (int i = 2; i * i <= limit; i++)
         {
             if (isPrime[i])
             {
-                for (int j = i * i; j <= customLimit; j += i)
+                for (int j = i * i; j <= limit; j += i)
                     isPrime[j] = false;
             }
         }
 
         var primes = new List<long>();
-        for (int i = 2; i <= customLimit; i++)
+        for (int i = 2; i <= limit; i++)
             if (isPrime[i])
                 primes.Add(i);
 
