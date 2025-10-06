@@ -15,7 +15,7 @@ public class SieveImplementation : ISieve
             throw new ArgumentOutOfRangeException(nameof(n), "n must be non-negative.");
 
         var upperBound = EstimateUpperBound(n);
-        var primes = ParallelSieve(upperBound);
+        var primes = ParallelSieve(upperBound, (int)n);
 
         return primes[(int)n];
     }
@@ -30,20 +30,22 @@ public class SieveImplementation : ISieve
         return (int)(n * (ln + lnln));
     }
 
-    private static List<long> ParallelSieve(int limit)
+    private static List<long> ParallelSieve(int limit, int count)
     {
-        int basePrimeLimit = (int)Math.Sqrt(limit) + 1;
+        var primes = new List<long>(count);
+
+        var basePrimeLimit = (int)Math.Sqrt(limit) + 1;
         var basePrimes = Sieve(basePrimeLimit);
 
         var segmentSize = Math.Min(SEGMENT_SIZE, limit);
-        int numSegments = (limit - basePrimeLimit) / segmentSize + 1;
+        var numSegments = (limit - basePrimeLimit) / segmentSize + 1;
 
         var localPrimes = new List<long>[numSegments];
 
-        Parallel.For(0, numSegments, iter =>
+        Parallel.For(0, numSegments, i =>
         {
-            int low = basePrimeLimit + 1 + iter * segmentSize;
-            int high = Math.Min(low + segmentSize - 1, limit);
+            var low = basePrimeLimit + 1 + i * segmentSize;
+            var high = Math.Min(low + segmentSize - 1, limit);
             var isPrime = new bool[high - low + 1];
             Array.Fill(isPrime, true);
 
@@ -52,19 +54,23 @@ public class SieveImplementation : ISieve
                 var remainder = low % prime;
                 var start = remainder == 0 ? low : (int)(low + (prime - remainder));
 
-                for (int i = start; i <= high; i += (int)prime)
-                    isPrime[i - low] = false;
+                for (int j = start; j <= high; j += (int)prime)
+                    isPrime[j - low] = false;
             }
 
             var segmentPrimes = new List<long>();
-            for (int i = low; i <= high; i++)
-                if (isPrime[i - low])
-                    segmentPrimes.Add(i);
+            for (int j = low; j <= high; j++)
+                if (isPrime[j - low])
+                    segmentPrimes.Add(j);
 
-            localPrimes[iter] = segmentPrimes;
+            localPrimes[i] = segmentPrimes;
         });
 
-        return basePrimes.Concat(localPrimes.SelectMany(x => x)).ToList();
+        primes.AddRange(basePrimes);
+        foreach (var segment in localPrimes)
+            primes.AddRange(segment);
+
+        return primes;
     }
     
     private static List<long> Sieve(int limit)
